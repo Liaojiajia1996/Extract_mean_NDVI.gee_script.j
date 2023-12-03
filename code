@@ -1,0 +1,64 @@
+// Load the FeatureCollection using the Table ID
+var parksTable = ee.FeatureCollection('projects/charged-chess-405202/assets/renamed_park_lat_long_unique');
+
+// Function to create a point geometry from the latitude and longitude properties
+function createGeometry(feature) {
+  // Note: The property names here must match the ones in your table exactly.
+  // If they are different, change 'latitude_right' and 'longitude_right'
+  // to match the property names in your table.
+  var point = ee.Geometry.Point([feature.get('longitude_right'), feature.get('latitude_right')]);
+  return feature.setGeometry(point);
+}
+
+// Map the function over the FeatureCollection to create the geometries
+var parks = parksTable.map(createGeometry);
+
+// Now you can work with the 'parks' FeatureCollection which has geometries
+// Map the function over the FeatureCollection to create the geometries
+var parks = parksTable.map(createGeometry);
+
+// Print the first Feature to see if the geometry was set
+print(parks.first());
+
+
+// Import the park data from an uploaded CSV file as a FeatureCollection
+var parksFeatureCollection = ee.FeatureCollection('projects/charged-chess-405202/assets/renamed_park_lat_long_unique');
+
+// Function to calculate NDVI for an image
+function addNDVI(image) {
+  var ndvi = image.normalizedDifference(['B5', 'B4']).rename('NDVI');
+  return image.addBands(ndvi);
+}
+
+// Function to calculate the mean NDVI for a given feature (park)
+function calculateNDVIMean(feature) {
+  // Assume the feature has properties 'latitude' and 'longitude'
+  var geometry = ee.Geometry.Point([feature.get('longitude'), feature.get('latitude')]);
+  var imageCollection = ee.ImageCollection('LANDSAT/LC08/C01/T1')
+    .filterDate('2019-07-01', '2019-07-31')
+    .filterBounds(geometry)
+    .map(addNDVI);
+
+  // Combine the image collection into a single image by taking the mean of the NDVI band
+  var ndviImage = imageCollection.mean().select('NDVI');
+  
+  // Calculate the mean NDVI over the feature's region
+  var mean = ndviImage.reduceRegion({
+    reducer: ee.Reducer.mean(),
+    geometry: geometry,
+    scale: 30
+  });
+
+  // Set the calculated NDVI mean as a property of the feature
+  return feature.set('mean_ndvi', mean.get('NDVI'));
+}
+
+// Map the function over the FeatureCollection
+var ndviMeansFeatureCollection = parksFeatureCollection.map(calculateNDVIMean);
+
+// Export the FeatureCollection as a CSV
+Export.table.toDrive({
+  collection: ndviMeansFeatureCollection,
+  description: 'Parks_NDVI_Means',
+  fileFormat: 'CSV'
+});
